@@ -1,0 +1,5 @@
+deps/onnxruntime-win-x64-1.24.4
+deps/fftw-3.3.5-dll64
+deps/ASIOSDK
+.vs/
+out/

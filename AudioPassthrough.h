@@ -49,7 +49,7 @@ static int paPassThroughCallback(const void* input, void* output, unsigned long 
 	float sample;
 
 	if (statusFlags) {
-		std::cout << "Audio glitch: " << statusFlags << "\n";
+		std::cerr << "Audio callback error: " << statusFlags << "\n";
 	}
 	
 	for (unsigned int i = 0; i < frameCount; i++) {

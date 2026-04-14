@@ -12,27 +12,38 @@ endif()
 project ("AudioTricks")
 
 # Add source to this project's executable.
-add_executable (AudioTricks "AudioTricks.cpp"    "BasePortAudio.h")
+add_executable (AudioTricks "AudioTricks.cpp"    "BasePortAudio.h" "AudioPassthrough.h")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET AudioTricks PROPERTY CXX_STANDARD 20)
 endif()
 
+target_sources(AudioTricks PRIVATE
+    ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/src/common/pa_ringbuffer.c
+)
+
 target_include_directories(AudioTricks PRIVATE 
     ${CMAKE_SOURCE_DIR}/deps/fftw-3.3.5-dll64
     ${CMAKE_SOURCE_DIR}/deps/onnxruntime-win-x64-1.24.4/include
     ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/include
+    ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/src/common
 )
 
 target_link_directories(AudioTricks PRIVATE 
     ${CMAKE_SOURCE_DIR}/deps/onnxruntime-win-x64-1.24.4/lib
+    ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/src/common
     ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/build/msvc/x64/Release
+)
+
+file(GLOB PA_LIBS
+    ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/src/common/*.lib
+    ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/build/msvc/x64/Release/portaudio_x64.lib
 )
 
 target_link_libraries(AudioTricks PRIVATE
     ${CMAKE_SOURCE_DIR}/deps/fftw-3.3.5-dll64/libfftw3f-3.lib
     onnxruntime
-    ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/build/msvc/x64/Release/portaudio_x64.lib
+    ${PA_LIBS}
 )
 
 function(copy_at_runtime target)

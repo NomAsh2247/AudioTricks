@@ -132,3 +132,8 @@ static int paToneCallback(const void* input, void* output, unsigned long frameCo
 
 	return paContinue;
 }
+
+static int paHarmonicsCallback(const void* input, void* output, unsigned long frameCount, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData) 
+{
+	float* out = (float*)output;
+}

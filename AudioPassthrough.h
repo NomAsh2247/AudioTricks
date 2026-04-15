@@ -54,8 +54,8 @@ static int paPassThroughCallback(const void* input, void* output, unsigned long 
 	
 	for (unsigned int i = 0; i < frameCount; i++) {
 		sample = in ? *in++ : 0.0f;
-		*out++ = sample * 0.5f;
-		*out++ = sample * 0.5f;
+		*out++ = sample;
+		*out++ = sample;
 	}
 
 	return paContinue;

@@ -12,7 +12,7 @@ int main()
 {
 	checkPaError(Pa_Initialize());
 
-	audioRingBuffer ringBuffer(2048, SAMPLE_RATE);
+	audioRingBuffer ringBuffer(2048*64, SAMPLE_RATE);
 
 	PaStream* stream;
 	/* Open an audio I/O stream. */
@@ -38,14 +38,11 @@ int main()
 	/*std::cout << "Press Enter to stop the stream..." << std::endl;
 	std::cin.get();*/
 
+	ImVec2 winShape(800, 600);
+
 	while (!glfwWindowShouldClose(spectrogram.gWindow)) {
-		if (spectrogram.processAudioBlock() != 0) {
-			// Sleep briefly to avoid busy-waiting if not enough audio data is available
-			Pa_Sleep(10);
-		}
-		else {
-			//std::cout << "Processed audio block, rendering spectrogram...\n";
-			spectrogram.render(ImVec2(800, 600));
+		if (spectrogram.processAudioBlock() == 0) {
+			spectrogram.render(winShape);
 		}
 	}
 

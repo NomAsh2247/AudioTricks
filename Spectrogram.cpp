@@ -10,8 +10,9 @@ int paRingBufferCallback(const void* input, void* output, unsigned long frameCou
 		std::cerr << "Audio callback error: " << statusFlags << "\n";
 	}
 
-	if (PaUtil_WriteRingBuffer(&ringBuffer->ringBuffer, in, frameCount) == 0) {
-		std::cerr << "Ring buffer overflow: Unable to write audio data\n";
+	ring_buffer_size_t written = PaUtil_WriteRingBuffer(&ringBuffer->ringBuffer, in, frameCount);
+	if (written < frameCount) {
+		std::cerr << "Ring buffer overflow: Unable to write " << (frameCount - written) * 100 / frameCount << "% samples (" << (frameCount - written) << " samples dropped)\n";
 	}
 
 	for (unsigned int i = 0; i < frameCount; i++) {
@@ -102,31 +103,35 @@ int Spectrogram::processAudioBlock()
 		return -1;
 	}
 
-	PaUtil_ReadRingBuffer(&ringBuffer->ringBuffer, fftInput, fftSize);
-	// Apply window function
-	for (size_t i = 0; i < fftSize; i++) {
-		fftInput[i] *= window[i];
-	}
-
-	// Execute FFT
-	fftwf_execute(fftPlan);
-	// Update plot data with magnitude of FFT output
-	std::vector<float> magnitudes(numBins);
-	for (size_t i = 0; i < numBins; i++) {
-		magnitudes[i] = sqrtf(fftOutput[i][0] * fftOutput[i][0] + fftOutput[i][1] * fftOutput[i][1]);
-		
-		if (logScale) {
-			magnitudes[i] = 20.0f * log10f(magnitudes[i] + 1e-6f);
+	while (availableSamples >= fftSize) {
+		PaUtil_ReadRingBuffer(&ringBuffer->ringBuffer, fftInput, fftSize);
+		// Apply window function
+		for (size_t i = 0; i < fftSize; i++) {
+			fftInput[i] *= window[i];
 		}
 
-		magnitudes[i] = std::clamp(magnitudes[i], -100.0f, 0.0f);
-	}
+		// Execute FFT
+		fftwf_execute(fftPlan);
+		// Update plot data with magnitude of FFT output
+		std::vector<float> magnitudes(numBins);
+		for (size_t i = 0; i < numBins; i++) {
+			magnitudes[i] = sqrtf(fftOutput[i][0] * fftOutput[i][0] + fftOutput[i][1] * fftOutput[i][1]);
 
-	plotData.push_back(std::move(magnitudes));
+			if (logScale) {
+				magnitudes[i] = 20.0f * log10f(magnitudes[i] + 1e-6f);
+			}
 
-	if (plotData.size() > maxHistory) { // Limit history to maxHistory frames
-		removedCols += plotData.size() - maxHistory;
-		plotData.erase(plotData.begin(), plotData.begin() + (plotData.size() - maxHistory));
+			magnitudes[i] = std::clamp(magnitudes[i], -100.0f, 0.0f);
+		}
+
+		plotData.push_back(std::move(magnitudes));
+
+		if (plotData.size() > maxHistory) { // Limit history to maxHistory frames
+			removedCols += plotData.size() - maxHistory;
+			plotData.erase(plotData.begin(), plotData.begin() + (plotData.size() - maxHistory));
+		}
+
+		availableSamples -= fftSize;
 	}
 
 	return 0;

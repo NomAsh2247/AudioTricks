@@ -12,7 +12,21 @@ endif()
 project ("AudioTricks")
 
 # Add source to this project's executable.
-add_executable (AudioTricks "AudioTricks.cpp"    "BasePortAudio.h" "AudioPassthrough.h")
+add_executable (AudioTricks 
+    "AudioTricks.cpp"
+    "BasePortAudio.h"
+    "AudioPassthrough.h"
+    "Spectrogram.h"
+    "Spectrogram.cpp"
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7/imgui.cpp
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7/imgui_draw.cpp
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7/imgui_tables.cpp
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7/imgui_widgets.cpp
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7/backends/imgui_impl_glfw.cpp
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7/backends/imgui_impl_opengl3.cpp
+    ${CMAKE_SOURCE_DIR}/deps/implot-1.0/implot.cpp
+    ${CMAKE_SOURCE_DIR}/deps/implot-1.0/implot_items.cpp
+)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET AudioTricks PROPERTY CXX_STANDARD 20)
@@ -27,12 +41,20 @@ target_include_directories(AudioTricks PRIVATE
     ${CMAKE_SOURCE_DIR}/deps/onnxruntime-win-x64-1.24.4/include
     ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/include
     ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/src/common
+    ${CMAKE_SOURCE_DIR}/deps/glfw-3.4/include
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7
+    ${CMAKE_SOURCE_DIR}/deps/imgui-1.92.7/backends
+    ${CMAKE_SOURCE_DIR}/deps/implot-1.0
 )
+
+find_package(OpenGL REQUIRED)
 
 target_link_directories(AudioTricks PRIVATE 
     ${CMAKE_SOURCE_DIR}/deps/onnxruntime-win-x64-1.24.4/lib
     ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/src/common
     ${CMAKE_SOURCE_DIR}/deps/portaudio-19.7.0/build/msvc/x64/Release
+    ${CMAKE_SOURCE_DIR}/deps/glfw-3.4/lib-vc2022
+    ${CMAKE_SOURCE_DIR}/deps/implot-1.0
 )
 
 file(GLOB PA_LIBS
@@ -44,6 +66,8 @@ target_link_libraries(AudioTricks PRIVATE
     ${CMAKE_SOURCE_DIR}/deps/fftw-3.3.5-dll64/libfftw3f-3.lib
     onnxruntime
     ${PA_LIBS}
+    glfw3
+    OpenGL::GL
 )
 
 function(copy_at_runtime target)

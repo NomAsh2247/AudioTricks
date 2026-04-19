@@ -26,12 +26,29 @@ int paRingBufferCallback(const void* input, void* output, unsigned long frameCou
 
 void glfw_error_callback(int error, const char* description) { std::cerr << "GLFW Error " << error << ": " << description << std::endl; }
 
-Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* ringBuffer) : fftSize(fftSize), numBins(fftSize / 2 + 1), hopSize(fftSize / hopDivisor), ringBuffer(ringBuffer), normalization(static_cast<float>(fftSize) * 0.5f)
+Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* ringBuffer, windowMethod method) : fftSize(fftSize), numBins(fftSize / 2 + 1), hopSize(fftSize / hopDivisor), ringBuffer(ringBuffer), normalization(static_cast<float>(fftSize) * 0.5f)
 {
-	// Create Hann window
+	// Create window
 	window.resize(fftSize);
-	for (size_t i = 0; i < fftSize; i++) {
-		window[i] = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (fftSize - 1)));
+	
+	switch (method)
+	{
+	default:
+	case windowMethod::Hanning:
+		for (size_t i = 0; i < fftSize; i++) {
+			window[i] = 0.5f * (1.0f - cosf(2.0f * M_PI * i / (fftSize - 1)));
+		}
+		break;
+	case windowMethod::Blackman:
+		for (size_t i = 0; i < fftSize; i++) {
+			window[i] = 0.42f - 0.5f * cosf(2.0f * M_PI * i / (fftSize - 1)) + 0.08f * cosf(4.0f * M_PI * i / (fftSize - 1));
+		}
+		break;
+	case windowMethod::BlackmanHarris:
+		for (size_t i = 0; i < fftSize; i++) {
+			window[i] = 0.35875f - 0.48829f * cosf(2.0f * M_PI * i / (fftSize - 1)) + 0.14128f * cosf(4.0f * M_PI * i / (fftSize - 1)) - 0.01168f * cosf(6.0f * M_PI * i / (fftSize - 1));
+		}
+		break;
 	}
 
 	// Allocate FFT input and output arrays

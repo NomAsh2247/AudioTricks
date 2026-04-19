@@ -36,12 +36,19 @@ private:
 	float* buffer;
 };
 
+enum class windowMethod
+{
+	Hanning,
+	Blackman,
+	BlackmanHarris
+};
+
 int paRingBufferCallback(const void* input, void* output, unsigned long frameCount, const PaStreamCallbackTimeInfo* timeInfo, PaStreamCallbackFlags statusFlags, void* userData);
 
 class Spectrogram
 {
 public:
-	Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* ringBuffer);
+	Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* ringBuffer, windowMethod method = windowMethod::Hanning);
 	~Spectrogram();
 
 	// Process the next audio block and update the spectrogram data

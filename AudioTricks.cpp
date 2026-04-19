@@ -30,7 +30,7 @@ int main()
 		return -1;
 	}
 
-	Spectrogram spectrogram(1024, 4, &ringBuffer);
+	Spectrogram spectrogram(1024, 4, &ringBuffer, windowMethod::BlackmanHarris);
 
 	checkPaError(Pa_StartStream(stream));
 

@@ -4,7 +4,7 @@ int paRingBufferCallback(const void* input, void* output, unsigned long frameCou
 {
 	audioRingBuffer* ringBuffer = (audioRingBuffer*)userData;
 	const float* in = (const float*)input;
-	float* out = (float*)output;
+	//float* out = (float*)output;
 
 	if (statusFlags) {
 		std::cerr << "Audio callback error: " << statusFlags << "\n";
@@ -15,18 +15,18 @@ int paRingBufferCallback(const void* input, void* output, unsigned long frameCou
 		std::cerr << "Ring buffer overflow: Unable to write " << (frameCount - written) * 100 / frameCount << "% samples (" << (frameCount - written) << " samples dropped)\n";
 	}
 
-	for (unsigned int i = 0; i < frameCount; i++) {
+	/*for (unsigned int i = 0; i < frameCount; i++) {
 		float sample = in ? *in++ : 0.0f;
 		*out++ = sample;
 		*out++ = sample;
 
-	}
+	}*/
 	return paContinue;
 }
 
 void glfw_error_callback(int error, const char* description) { std::cerr << "GLFW Error " << error << ": " << description << std::endl; }
 
-Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* ringBuffer) : fftSize(fftSize), numBins(fftSize / 2 + 1), hopSize(fftSize / hopDivisor), ringBuffer(ringBuffer)
+Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* ringBuffer) : fftSize(fftSize), numBins(fftSize / 2 + 1), hopSize(fftSize / hopDivisor), ringBuffer(ringBuffer), normalization(static_cast<float>(fftSize) * 0.5f)
 {
 	// Create Hann window
 	window.resize(fftSize);
@@ -37,7 +37,8 @@ Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* rin
 	// Allocate FFT input and output arrays
 	fftInput = new float[fftSize];
 	fftOutput = new fftwf_complex[numBins];
-	plotData.resize(maxHistory, std::vector<float>(numBins, -100.0f));
+	plotData.resize(maxHistory, std::vector<float>(numBins, minDb));
+	overlapBuffer.resize(fftSize, 0.0f);
 
 	// Precalculate frequencies per bin
 	freq.resize(numBins);
@@ -96,48 +97,80 @@ Spectrogram::~Spectrogram()
 
 int Spectrogram::processAudioBlock()
 {
-	// Read audio data from the ring buffer
 	size_t availableSamples = PaUtil_GetRingBufferReadAvailable(&ringBuffer->ringBuffer);
-	if (availableSamples < fftSize) {
-		//std::cerr << "Not enough audio data available for FFT\n";
-		return -1;
-	}
 
-	while (availableSamples >= fftSize) {
-		PaUtil_ReadRingBuffer(&ringBuffer->ringBuffer, fftInput, fftSize);
-		// Apply window function
+	// Need at least hopSize new samples to advance one frame
+	while (availableSamples >= hopSize) {
+
+		// Shift old samples left by hopSize
+		std::move(
+			overlapBuffer.begin() + hopSize,
+			overlapBuffer.end(),
+			overlapBuffer.begin()
+		);
+
+		// Read new samples into the end of the overlap buffer
+		PaUtil_ReadRingBuffer(
+			&ringBuffer->ringBuffer,
+			overlapBuffer.data() + (fftSize - hopSize),
+			hopSize
+		);
+
+		availableSamples -= hopSize;
+
+		// Copy overlap buffer into FFT input
+		std::copy(overlapBuffer.begin(), overlapBuffer.end(), fftInput);
+
+		// Remove DC offset
+		float mean = 0.0f;
 		for (size_t i = 0; i < fftSize; i++) {
-			fftInput[i] *= window[i];
+			mean += fftInput[i];
+		}
+		mean /= static_cast<float>(fftSize);
+
+		// Apply DC removal and window
+		for (size_t i = 0; i < fftSize; i++) {
+			fftInput[i] = (fftInput[i] - mean) * window[i];
 		}
 
 		// Execute FFT
 		fftwf_execute(fftPlan);
-		// Update plot data with magnitude of FFT output
+
 		std::vector<float> magnitudes(numBins);
+
 		for (size_t i = 0; i < numBins; i++) {
-			magnitudes[i] = sqrtf(fftOutput[i][0] * fftOutput[i][0] + fftOutput[i][1] * fftOutput[i][1]);
+			const float re = fftOutput[i][0];
+			const float im = fftOutput[i][1];
+
+			float mag = sqrtf(re * re + im * im);
+
+			// Normalize FFT magnitude
+			mag /= normalization;
 
 			if (logScale) {
-				magnitudes[i] = 20.0f * log10f(magnitudes[i] + 1e-6f);
+				magnitudes[i] = 20.0f * log10f(mag + 1e-12f);
+				magnitudes[i] = std::clamp(magnitudes[i], minDb, maxDb);
 			}
-
-			magnitudes[i] = std::clamp(magnitudes[i], -100.0f, 0.0f);
+			else {
+				magnitudes[i] = mag;
+			}
 		}
 
 		plotData.push_back(std::move(magnitudes));
 
-		if (plotData.size() > maxHistory) { // Limit history to maxHistory frames
+		if (plotData.size() > maxHistory) {
 			removedCols += plotData.size() - maxHistory;
-			plotData.erase(plotData.begin(), plotData.begin() + (plotData.size() - maxHistory));
+			plotData.erase(
+				plotData.begin(),
+				plotData.begin() + (plotData.size() - maxHistory)
+			);
 		}
-
-		availableSamples -= fftSize;
 	}
 
 	return 0;
 }
 
-int Spectrogram::render(const ImVec2& size)
+int Spectrogram::render()
 {
 	glfwPollEvents();
 
@@ -148,7 +181,15 @@ int Spectrogram::render(const ImVec2& size)
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
-	ImGui::Begin("Spectrogram");
+	ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize, ImGuiCond_Always);
+	ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+
+	ImGui::Begin("Spectrogram", 
+		nullptr,
+		ImGuiWindowFlags_NoMove |
+		ImGuiWindowFlags_NoResize |
+		ImGuiWindowFlags_NoCollapse
+	);
 
 	if (!plotData.empty()) {
 
@@ -157,7 +198,7 @@ int Spectrogram::render(const ImVec2& size)
 
 		// Flatten plotData into a contiguous buffer
 		static std::vector<float> heatmapData;
-		heatmapData.resize(rows * cols, -100.0f);
+		heatmapData.resize(rows * cols, minDb);
 
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
@@ -167,26 +208,56 @@ int Spectrogram::render(const ImVec2& size)
 		}
 
 		ImPlot::PushColormap(ImPlotColormap_Jet);
+		ImVec2 plotSize = ImGui::GetContentRegionAvail();
 
-		if (ImPlot::BeginPlot("##SpectrogramPlot")) {
+		if (ImPlot::BeginPlot("##SpectrogramPlot", plotSize)) {
 
-			ImPlot::SetupAxes("Time (frames)", "Frequency (Hz)",
-				ImPlotAxisFlags_None,
-				ImPlotAxisFlags_None);
+			ImPlotAxisFlags xFlags = ImPlotAxisFlags_None;
+			ImPlotAxisFlags yFlags = ImPlotAxisFlags_None;
 
-			ImPlot::SetupAxisLimits(ImAxis_X1, 0, cols, ImGuiCond_Always);
-			ImPlot::SetupAxisLimits(ImAxis_Y1, 0, ringBuffer->sampleRate / 2.0f, ImGuiCond_Always);
+			if (logScale) {
+				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
+			}
+
+			ImPlot::SetupAxes(
+				"Time (s)",
+				"Frequency (Hz)",
+				xFlags,
+				yFlags
+			);
+
+			// Compute actual visible time range
+			const float startTime = getColTime(0);
+			const float endTime = getColTime(cols);
+
+			ImPlot::SetupAxisLimits(
+				ImAxis_X1,
+				startTime,
+				endTime,
+				ImGuiCond_Always
+			);
+
+			// Avoid log-scale issues at 0 Hz
+			const double minFreq = logScale ? 20.0 : 0.0;
+			const double maxFreq = ringBuffer->sampleRate / 2.0;
+
+			ImPlot::SetupAxisLimits(
+				ImAxis_Y1,
+				minFreq,
+				maxFreq,
+				ImGuiCond_Always
+			);
 
 			ImPlot::PlotHeatmap(
 				"Spectrogram",
 				heatmapData.data(),
 				rows,
 				cols,
-				-100.0f,   // min value
-				0.0f,      // max value
+				minDb,   // min value
+				maxDb,      // max value
 				nullptr,
-				ImPlotPoint(0, 0),
-				ImPlotPoint((double)cols, ringBuffer->sampleRate / 2.0)
+				ImPlotPoint(startTime, 0.0),
+				ImPlotPoint(endTime, maxFreq)
 			);
 
 			ImPlot::EndPlot();

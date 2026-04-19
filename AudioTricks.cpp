@@ -18,7 +18,7 @@ int main()
 	/* Open an audio I/O stream. */
 	err = Pa_OpenDefaultStream(&stream,
 		1,
-		2,
+		0,
 		paFloat32,
 		SAMPLE_RATE,
 		paFramesPerBufferUnspecified,
@@ -38,11 +38,9 @@ int main()
 	/*std::cout << "Press Enter to stop the stream..." << std::endl;
 	std::cin.get();*/
 
-	ImVec2 winShape(800, 600);
-
 	while (!glfwWindowShouldClose(spectrogram.gWindow)) {
 		if (spectrogram.processAudioBlock() == 0) {
-			spectrogram.render(winShape);
+			spectrogram.render();
 		}
 	}
 

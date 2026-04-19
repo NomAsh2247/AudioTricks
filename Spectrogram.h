@@ -46,7 +46,7 @@ public:
 
 	// Process the next audio block and update the spectrogram data
 	int processAudioBlock();
-	int render(const ImVec2& size);
+	int render();
 
 	GLFWwindow* gWindow = nullptr;
 	std::vector<std::vector<float>> plotData;
@@ -60,11 +60,16 @@ private:
 	std::vector<float> window;
 	float* fftInput;
 	fftwf_complex* fftOutput;
+	std::vector<float> overlapBuffer;
+	const float normalization;
+	const float minDb = -120.0f;
+	const float maxDb = 0.0f;
 	bool logScale = true;
 	const size_t maxHistory = 500; // Max number of columns to keep in the spectrogram
 
 	std::vector<float> freq;
 
+	bool plotLog = true;
 	size_t removedCols = 0;
 	float getColTime(size_t index);
 };

@@ -52,7 +52,7 @@ Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* rin
 	}
 
 	// Magnitude type
-	if (logScale) {
+	if (logMagnitude) {
 		minMag = -120.0f;
 		maxMag = 0.0f;
 	}
@@ -149,7 +149,7 @@ int Spectrogram::processAudioBlock()
 			// Normalize FFT magnitude
 			mag /= normalization;
 
-			if (logScale) {
+			if (logMagnitude) {
 				magnitudes[i] = 20.0f * log10f(mag + 1e-12f);
 				magnitudes[i] = std::clamp(magnitudes[i], minMag, maxMag);
 			}
@@ -226,7 +226,7 @@ int Spectrogram::render()
 			ImPlotAxisFlags xFlags = ImPlotAxisFlags_None;
 			ImPlotAxisFlags yFlags = ImPlotAxisFlags_None;
 
-			if (logScale) {
+			if (logFrequency) {
 				ImPlot::SetupAxisScale(ImAxis_Y1, ImPlotScale_Log10);
 			}
 
@@ -249,7 +249,7 @@ int Spectrogram::render()
 			);
 
 			// Avoid log-scale issues at 0 Hz
-			const double minFreq = logScale ? 20.0 : 0.0;
+			const double minFreq = logFrequency ? 20.0 : 0.0;
 			const double maxFreq = ringBuffer->sampleRate / 2.0;
 
 			ImPlot::SetupAxisLimits(
@@ -267,7 +267,7 @@ int Spectrogram::render()
 				minMag,   // min value
 				maxMag,      // max value
 				nullptr,
-				ImPlotPoint(startTime, 0.0),
+				ImPlotPoint(startTime, minFreq),
 				ImPlotPoint(endTime, maxFreq)
 			);
 

@@ -72,8 +72,9 @@ private:
 	std::vector<float> overlapBuffer;
 	const float normalization;
 	float minMag;
-	float maxMag;
-	bool logScale = true;
+	float maxMag; 
+	bool logMagnitude = true;
+	bool logFrequency = true;
 	const size_t maxHistory = 500; // Max number of columns to keep in the spectrogram
 	GLFWwindow* gWindow = nullptr;
 

@@ -12,7 +12,7 @@ int main()
 {
 	checkPaError(Pa_Initialize());
 
-	audioRingBuffer ringBuffer(2048*64, SAMPLE_RATE);
+	audioRingBuffer ringBuffer(2048*32, SAMPLE_RATE);
 
 	PaStream* stream;
 	/* Open an audio I/O stream. */

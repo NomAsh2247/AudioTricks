@@ -18,6 +18,8 @@
 #include <cmath>
 #include <sstream>
 #include <mutex>
+#include <thread>
+#include <atomic>
 
 struct audioRingBuffer
 {
@@ -56,7 +58,7 @@ public:
 	int processAudioBlock();
 	int render();
 
-	GLFWwindow* gWindow = nullptr;
+	std::atomic<bool> atmRend;
 private:
 	const size_t fftSize;
 	const size_t numBins;
@@ -73,12 +75,14 @@ private:
 	float maxMag;
 	bool logScale = true;
 	const size_t maxHistory = 500; // Max number of columns to keep in the spectrogram
+	GLFWwindow* gWindow = nullptr;
 
 	std::vector<float> freq;
 
 	size_t removedCols = 0, rendCols = 0;
 	std::vector<std::vector<float>> procData, rendData;
-	std::mutex rendMutex;
+	std::mutex mtxRend;
+	std::thread thrRend;
 
 	float getColTime(size_t index);
 	float getRendColTime(size_t index);

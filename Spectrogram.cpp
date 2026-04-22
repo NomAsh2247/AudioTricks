@@ -77,7 +77,13 @@ Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* rin
 	// Create FFT plan
 	fftPlan = fftwf_plan_dft_r2c_1d(static_cast<int>(fftSize), fftInput, fftOutput, FFTW_MEASURE);
 
-	initRender();
+	thrRend = std::thread([&]() {
+		initRender();
+		while (!glfwWindowShouldClose(gWindow)) {
+			render();
+		}
+		freeRender();
+		});
 }
 
 Spectrogram::~Spectrogram()
@@ -86,7 +92,7 @@ Spectrogram::~Spectrogram()
 	delete[] fftInput;
 	delete[] fftOutput;
 
-	freeRender();
+	thrRend.join();
 }
 
 int Spectrogram::processAudioBlock()
@@ -151,7 +157,7 @@ int Spectrogram::processAudioBlock()
 		}
 
 		{
-			std::lock_guard<std::mutex> lock(rendMutex);
+			std::lock_guard<std::mutex> lock(mtxRend);
 			procData.push_back(std::move(magnitudes));
 
 			if (procData.size() > maxHistory) {
@@ -189,7 +195,7 @@ int Spectrogram::render()
 	);
 
 	{
-		std::lock_guard<std::mutex> lock(rendMutex);
+		std::lock_guard<std::mutex> lock(mtxRend);
 		rendData = procData;
 		rendCols = removedCols;
 	}
@@ -297,6 +303,8 @@ float Spectrogram::getRendColTime(size_t index)
 
 void Spectrogram::initRender()
 {
+	atmRend.store(true);
+
 	glfwSetErrorCallback(glfw_error_callback);
 
 	if (!glfwInit()) {
@@ -329,6 +337,8 @@ void Spectrogram::initRender()
 
 void Spectrogram::freeRender()
 {
+	atmRend.store(false);
+
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
 	ImPlot::DestroyContext();

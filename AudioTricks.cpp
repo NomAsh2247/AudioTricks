@@ -37,11 +37,9 @@ int main()
 	// Wait for user input to stop the stream
 	/*std::cout << "Press Enter to stop the stream..." << std::endl;
 	std::cin.get();*/
-
-	while (!glfwWindowShouldClose(spectrogram.gWindow)) {
-		if (spectrogram.processAudioBlock() == 0) {
-			spectrogram.render();
-		}
+	size_t k = 0;
+	while (spectrogram.atmRend.load()) {
+		spectrogram.processAudioBlock();
 	}
 
 	checkPaError(Pa_StopStream(stream));

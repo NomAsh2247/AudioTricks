@@ -77,6 +77,8 @@ Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* rin
 	// Create FFT plan
 	fftPlan = fftwf_plan_dft_r2c_1d(static_cast<int>(fftSize), fftInput, fftOutput, FFTW_MEASURE);
 
+	// thread flag needs to be set outside the thread to avoid race condition
+	atmRend.store(true);
 	thrRend = std::thread([&]() {
 		initRender();
 		while (!glfwWindowShouldClose(gWindow)) {
@@ -303,8 +305,6 @@ float Spectrogram::getRendColTime(size_t index)
 
 void Spectrogram::initRender()
 {
-	atmRend.store(true);
-
 	glfwSetErrorCallback(glfw_error_callback);
 
 	if (!glfwInit()) {

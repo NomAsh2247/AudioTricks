@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cmath>
 #include <sstream>
+#include <mutex>
 
 struct audioRingBuffer
 {
@@ -56,7 +57,6 @@ public:
 	int render();
 
 	GLFWwindow* gWindow = nullptr;
-	std::vector<std::vector<float>> plotData;
 private:
 	const size_t fftSize;
 	const size_t numBins;
@@ -76,6 +76,12 @@ private:
 
 	std::vector<float> freq;
 
-	size_t removedCols = 0;
+	size_t removedCols = 0, rendCols = 0;
+	std::vector<std::vector<float>> procData, rendData;
+	std::mutex rendMutex;
+
 	float getColTime(size_t index);
+	float getRendColTime(size_t index);
+	void initRender();
+	void freeRender();
 };

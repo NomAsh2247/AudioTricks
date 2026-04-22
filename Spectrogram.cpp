@@ -64,7 +64,8 @@ Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* rin
 	// Allocate FFT input and output arrays
 	fftInput = new float[fftSize];
 	fftOutput = new fftwf_complex[numBins];
-	plotData.resize(maxHistory, std::vector<float>(numBins, minMag));
+	procData.resize(maxHistory, std::vector<float>(numBins, minMag));
+	rendData.resize(maxHistory, std::vector<float>(numBins, minMag));
 	overlapBuffer.resize(fftSize, 0.0f);
 
 	// Precalculate frequencies per bin
@@ -76,35 +77,7 @@ Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* rin
 	// Create FFT plan
 	fftPlan = fftwf_plan_dft_r2c_1d(static_cast<int>(fftSize), fftInput, fftOutput, FFTW_MEASURE);
 
-	// IMGUI setup
-	glfwSetErrorCallback(glfw_error_callback);
-
-	if (!glfwInit()) {
-		std::cerr << "Failed to initialize GLFW" << std::endl;
-		return;
-	}
-
-	const char* glsl_version = "#version 130";
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-
-	gWindow = glfwCreateWindow(1200, 800, "Spectrogram", nullptr, nullptr);
-	if (!gWindow) {
-		std::cerr << "Failed to create GLFW window" << std::endl;
-		glfwTerminate();
-		return;
-	}
-	glfwMakeContextCurrent(gWindow);
-	glfwSwapInterval(0); // Disable vsync
-
-	IMGUI_CHECKVERSION();
-	ImGui::CreateContext();
-	ImPlot::CreateContext();
-
-	ImGui::StyleColorsDark();
-
-	ImGui_ImplGlfw_InitForOpenGL(gWindow, true);
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	initRender();
 }
 
 Spectrogram::~Spectrogram()
@@ -113,13 +86,7 @@ Spectrogram::~Spectrogram()
 	delete[] fftInput;
 	delete[] fftOutput;
 
-	// Cleanup ImGui and GLFW
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImPlot::DestroyContext();
-	ImGui::DestroyContext();
-	glfwDestroyWindow(gWindow);
-	glfwTerminate();
+	freeRender();
 }
 
 int Spectrogram::processAudioBlock()
@@ -183,14 +150,17 @@ int Spectrogram::processAudioBlock()
 			}
 		}
 
-		plotData.push_back(std::move(magnitudes));
+		{
+			std::lock_guard<std::mutex> lock(rendMutex);
+			procData.push_back(std::move(magnitudes));
 
-		if (plotData.size() > maxHistory) {
-			removedCols += plotData.size() - maxHistory;
-			plotData.erase(
-				plotData.begin(),
-				plotData.begin() + (plotData.size() - maxHistory)
-			);
+			if (procData.size() > maxHistory) {
+				removedCols += procData.size() - maxHistory;
+				procData.erase(
+					procData.begin(),
+					procData.begin() + (procData.size() - maxHistory)
+				);
+			}
 		}
 	}
 
@@ -218,19 +188,25 @@ int Spectrogram::render()
 		ImGuiWindowFlags_NoCollapse
 	);
 
-	if (!plotData.empty()) {
+	{
+		std::lock_guard<std::mutex> lock(rendMutex);
+		rendData = procData;
+		rendCols = removedCols;
+	}
+
+	if (!rendData.empty()) {
 
 		const int rows = static_cast<int>(numBins);
-		const int cols = static_cast<int>(plotData.size());
+		const int cols = static_cast<int>(rendData.size());
 
-		// Flatten plotData into a contiguous buffer
+		// Flatten rendData into a contiguous buffer
 		static std::vector<float> heatmapData;
 		heatmapData.resize(rows * cols, minMag);
 
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
 				// Flip vertically so low frequencies appear at bottom
-				heatmapData[y * cols + x] = plotData[x][rows - 1 - y];
+				heatmapData[y * cols + x] = rendData[x][rows - 1 - y];
 			}
 		}
 
@@ -254,8 +230,8 @@ int Spectrogram::render()
 			);
 
 			// Compute actual visible time range
-			const float startTime = getColTime(0);
-			const float endTime = getColTime(cols);
+			const float startTime = getRendColTime(0);
+			const float endTime = getRendColTime(cols);
 
 			ImPlot::SetupAxisLimits(
 				ImAxis_X1,
@@ -312,4 +288,51 @@ int Spectrogram::render()
 float Spectrogram::getColTime(size_t index)
 {
 	return ((float)(removedCols + index) * (float)hopSize + fftSize / 2.0f) / (float)ringBuffer->sampleRate;
+}
+
+float Spectrogram::getRendColTime(size_t index)
+{
+	return ((float)(rendCols + index) * (float)hopSize + fftSize / 2.0f) / (float)ringBuffer->sampleRate;
+}
+
+void Spectrogram::initRender()
+{
+	glfwSetErrorCallback(glfw_error_callback);
+
+	if (!glfwInit()) {
+		std::cerr << "Failed to initialize GLFW" << std::endl;
+		return;
+	}
+
+	const char* glsl_version = "#version 130";
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+
+	gWindow = glfwCreateWindow(1200, 800, "Spectrogram", nullptr, nullptr);
+	if (!gWindow) {
+		std::cerr << "Failed to create GLFW window" << std::endl;
+		glfwTerminate();
+		return;
+	}
+	glfwMakeContextCurrent(gWindow);
+	glfwSwapInterval(0); // Disable vsync
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImPlot::CreateContext();
+
+	ImGui::StyleColorsDark();
+
+	ImGui_ImplGlfw_InitForOpenGL(gWindow, true);
+	ImGui_ImplOpenGL3_Init(glsl_version);
+}
+
+void Spectrogram::freeRender()
+{
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImPlot::DestroyContext();
+	ImGui::DestroyContext();
+	glfwDestroyWindow(gWindow);
+	glfwTerminate();
 }

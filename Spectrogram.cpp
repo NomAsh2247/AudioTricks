@@ -51,10 +51,20 @@ Spectrogram::Spectrogram(size_t fftSize, size_t hopDivisor, audioRingBuffer* rin
 		break;
 	}
 
+	// Magnitude type
+	if (logScale) {
+		minMag = -120.0f;
+		maxMag = 0.0f;
+	}
+	else {
+		minMag = 0.0f;
+		maxMag = 1.0f;
+	}
+
 	// Allocate FFT input and output arrays
 	fftInput = new float[fftSize];
 	fftOutput = new fftwf_complex[numBins];
-	plotData.resize(maxHistory, std::vector<float>(numBins, minDb));
+	plotData.resize(maxHistory, std::vector<float>(numBins, minMag));
 	overlapBuffer.resize(fftSize, 0.0f);
 
 	// Precalculate frequencies per bin
@@ -166,7 +176,7 @@ int Spectrogram::processAudioBlock()
 
 			if (logScale) {
 				magnitudes[i] = 20.0f * log10f(mag + 1e-12f);
-				magnitudes[i] = std::clamp(magnitudes[i], minDb, maxDb);
+				magnitudes[i] = std::clamp(magnitudes[i], minMag, maxMag);
 			}
 			else {
 				magnitudes[i] = mag;
@@ -215,7 +225,7 @@ int Spectrogram::render()
 
 		// Flatten plotData into a contiguous buffer
 		static std::vector<float> heatmapData;
-		heatmapData.resize(rows * cols, minDb);
+		heatmapData.resize(rows * cols, minMag);
 
 		for (int x = 0; x < cols; x++) {
 			for (int y = 0; y < rows; y++) {
@@ -270,8 +280,8 @@ int Spectrogram::render()
 				heatmapData.data(),
 				rows,
 				cols,
-				minDb,   // min value
-				maxDb,      // max value
+				minMag,   // min value
+				maxMag,      // max value
 				nullptr,
 				ImPlotPoint(startTime, 0.0),
 				ImPlotPoint(endTime, maxFreq)

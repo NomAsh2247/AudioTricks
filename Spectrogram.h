@@ -69,14 +69,13 @@ private:
 	fftwf_complex* fftOutput;
 	std::vector<float> overlapBuffer;
 	const float normalization;
-	const float minDb = -120.0f;
-	const float maxDb = 0.0f;
+	float minMag;
+	float maxMag;
 	bool logScale = true;
 	const size_t maxHistory = 500; // Max number of columns to keep in the spectrogram
 
 	std::vector<float> freq;
 
-	bool plotLog = true;
 	size_t removedCols = 0;
 	float getColTime(size_t index);
 };
